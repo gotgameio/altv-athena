@@ -1,10 +1,8 @@
-import * as alt from 'alt-server';
-import { PluginSystem } from '../../../server/systems/plugins';
-import { InventoryView } from './src/view';
+import * as Athena from '@AthenaServer/api/index.js';
+import { InventoryView } from './src/view.js';
 
-const PLUGIN_NAME = 'core-inventory';
+const PLUGIN_NAME = 'inventory';
 
-PluginSystem.registerPlugin(PLUGIN_NAME, () => {
+Athena.systems.plugins.registerPlugin(PLUGIN_NAME, () => {
     InventoryView.init();
-    alt.log(`~lg~CORE ==> ${PLUGIN_NAME} was Loaded`);
 });

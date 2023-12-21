@@ -1,29 +1,61 @@
 import * as alt from 'alt-server';
-import { Athena } from '@AthenaServer/api/athena';
-import { command } from '@AthenaServer/decorators/commands';
-import { PedController } from '@AthenaServer/streamers/ped';
-import { WorldNotificationController } from '@AthenaServer/streamers/worldNotifications';
-import { ServerJobTrigger } from '@AthenaServer/systems/jobTrigger';
-import { SYSTEM_EVENTS } from '@AthenaShared/enums/system';
-import { WORLD_NOTIFICATION_TYPE } from '@AthenaShared/enums/worldNotificationTypes';
-import { ANIMATION_FLAGS } from '@AthenaShared/flags/animationFlags';
-import { PERMISSIONS } from '@AthenaShared/flags/permissionFlags';
-import { Action } from '@AthenaShared/interfaces/actions';
-import { Animation } from '@AthenaShared/interfaces/animation';
-import IAttachable from '@AthenaShared/interfaces/iAttachable';
-import { InputMenu, InputOptionType, InputResult } from '@AthenaShared/interfaces/inputMenus';
-import { IPed } from '@AthenaShared/interfaces/iPed';
-import { JobTrigger } from '@AthenaShared/interfaces/jobTrigger';
+import * as Athena from '@AthenaServer/api/index.js';
+import { WORLD_NOTIFICATION_TYPE } from '@AthenaShared/enums/worldNotificationTypes.js';
+import { ANIMATION_FLAGS } from '@AthenaShared/flags/animationFlags.js';
+import { Action } from '@AthenaShared/interfaces/actions.js';
+import { Animation } from '@AthenaShared/interfaces/animation.js';
+import IAttachable from '@AthenaShared/interfaces/iAttachable.js';
+import { PedBone } from '@AthenaShared/enums/boneIds.js';
+import { IPed } from '@AthenaShared/interfaces/iPed.js';
+import { JobTrigger } from '@AthenaShared/interfaces/jobTrigger.js';
 
-class TestCommands {
-    @command('testerrorscreen', '/testerrorscreen - Shows a temporary error screen', PERMISSIONS.ADMIN)
-    private static testErrorScreen(player: alt.Player) {
+Athena.commands.register(
+    'timecycle',
+    '/timecycle [name]',
+    ['admin'],
+    async (player: alt.Player, name: string | undefined) => {
+        if (!name) {
+            return;
+        }
+
+        Athena.player.emit.setTimeCycleEffect(player, String(name), 5000);
+    },
+);
+
+Athena.commands.register('cleartimecycle', '/cleartimecycle', ['admin'], async (player: alt.Player) => {
+    Athena.player.emit.clearTimeCycleEffect(player);
+});
+
+Athena.commands.register('vehHash', '/vehHash', ['admin'], async (player: alt.Player, hash: string) => {
+    let model = Athena.utility.hashLookup.vehicle.hash(parseInt(hash));
+    Athena.player.emit.message(player, model.displayName);
+});
+
+Athena.commands.register('pedHash', '/pedHash', ['admin'], async (player: alt.Player, hash: string) => {
+    let model = Athena.utility.hashLookup.ped.hash(parseInt(hash));
+    Athena.player.emit.message(player, model.name);
+});
+
+Athena.commands.register('propHash', '/propHash', ['admin'], async (player: alt.Player, hash: string) => {
+    let model = Athena.utility.hashLookup.prop.hash(parseInt(hash));
+    Athena.player.emit.message(player, model.name);
+});
+
+Athena.commands.register(
+    'testerrorscreen',
+    '/testerrorscreen - Shows a temporary error screen',
+    ['admin'],
+    (player: alt.Player) => {
         Athena.player.emit.createErrorScreen(player, { duration: 5000, title: 'Test', text: 'Hello World!' });
-    }
+    },
+);
 
-    @command('testworldhelptext', '/testworldhelptext - Shows temporary world help text', PERMISSIONS.ADMIN)
-    private static testWorldHelpTextComamnd(player: alt.Player) {
-        const uid = WorldNotificationController.addToPlayer(player, {
+Athena.commands.register(
+    'testworldhelptext',
+    '/testworldhelptext - Shows temporary world help text',
+    ['admin'],
+    (player: alt.Player) => {
+        const uid = Athena.controllers.worldNotification.addToPlayer(player, {
             text: 'Hello World!',
             type: WORLD_NOTIFICATION_TYPE.ARROW_BOTTOM,
             pos: { ...player.pos },
@@ -31,92 +63,44 @@ class TestCommands {
 
         alt.setTimeout(() => {
             if (!player || !player.valid) return;
-            WorldNotificationController.removeFromPlayer(player, uid);
+            Athena.controllers.worldNotification.removeFromPlayer(player, uid);
         }, 5000);
-    }
+    },
+);
 
-    @command('testspinner', '/testspinner - Shows a temporary spinner', PERMISSIONS.ADMIN)
-    private static testSpinnerCommand(player: alt.Player) {
-        Athena.player.emit.createSpinner(player, { duration: 5000, text: 'Hello World!' });
-    }
+Athena.commands.register('testspinner', '/testspinner - Shows a temporary spinner', ['admin'], (player: alt.Player) => {
+    Athena.player.emit.createSpinner(player, { duration: 5000, text: 'Hello World!' });
+});
 
-    @command('testshard', '/testshard - Shows a temporary shard', PERMISSIONS.ADMIN)
-    private static testShardCommand(player: alt.Player) {
-        Athena.player.emit.createShard(player, {
-            duration: 5000,
-            title: '~r~Hello World!',
-            text: '~y~Shards are pretty neat sometimes.',
-        });
-    }
+Athena.commands.register('testshard', '/testshard - Shows a temporary shard', ['admin'], (player: alt.Player) => {
+    Athena.player.emit.createShard(player, {
+        duration: 5000,
+        title: '~r~Hello World!',
+        text: '~y~Shards are pretty neat sometimes.',
+    });
+});
 
-    @command('testcredits', '/testcredits - Shows a temporary credits display', PERMISSIONS.ADMIN)
-    private static testCreditsCommand(player: alt.Player) {
+Athena.commands.register(
+    'testcredits',
+    '/testcredits - Shows a temporary credits display',
+    ['admin'],
+    (player: alt.Player) => {
         Athena.player.emit.createCredits(player, {
             duration: 5000,
             role: 'Athena Creator',
             name: 'Stuyk',
         });
-    }
+    },
+);
 
-    @command('testinput', '/testinput', PERMISSIONS.ADMIN)
-    private static testInputCommand(player: alt.Player) {
-        const menu: InputMenu = {
-            title: 'Input Test',
-            options: [
-                {
-                    id: 'some-name',
-                    desc: 'Write something...',
-                    placeholder: 'Property Name',
-                    type: InputOptionType.TEXT,
-                    error: 'Must specify property name.',
-                },
-                {
-                    id: 'some-number',
-                    desc: 'Some kind of number...',
-                    placeholder: '5000...',
-                    type: InputOptionType.NUMBER,
-                    error: 'Must specify property value.',
-                },
-                {
-                    id: 'randomize',
-                    desc: 'Should this peds apperance be randomized?',
-                    placeholder: '',
-                    type: InputOptionType.CHOICE,
-                    error: '',
-                    choices: [
-                        { text: 'Yes', value: 'true' },
-                        { text: 'No', value: 'false' },
-                    ],
-                },
-                {
-                    id: 'textlabel',
-                    desc: 'Should this ped have an Textlabel?',
-                    placeholder: '',
-                    type: InputOptionType.CHOICE,
-                    error: '',
-                    choices: [
-                        { text: 'Yes', value: 'true' },
-                        { text: 'No', value: 'false' },
-                    ],
-                },
-            ],
-            serverEvent: 'cmd:Input:Test',
-            generalOptions: {
-                submitText: 'Wow Nice Submit',
-                cancelText: 'Bad Submit',
-                description: 'idk there is some text here now lul',
-                skipChecks: false,
-            },
-        };
-
-        Athena.player.emit.inputMenu(player, menu);
-    }
-
-    @command('testobjectattach', '/testobjectattach - Test object attachment', PERMISSIONS.ADMIN)
-    private static testObjectAttachCommand(player: alt.Player) {
+Athena.commands.register(
+    'testobjectattach',
+    '/testobjectattach - Test object attachment',
+    ['admin'],
+    (player: alt.Player) => {
         const attachable: IAttachable = {
             model: 'prop_tool_fireaxe',
-            bone: 57005,
+            bone: PedBone.SKEL_R_Hand,
             pos: {
                 x: 0.1,
                 y: -0.1,
@@ -130,15 +114,19 @@ class TestCommands {
         };
 
         Athena.player.emit.objectAttach(player, attachable, 5000);
-    }
+    },
+);
 
-    @command('testobjectattachinfinite', '/testobjectattachinfinite - Test object attachment', PERMISSIONS.ADMIN)
-    private static testObjectAttachInfiniteCommand(player: alt.Player) {
+Athena.commands.register(
+    'testobjectattachinfinite',
+    '/testobjectattachinfinite - Test object attachment',
+    ['admin'],
+    (player: alt.Player) => {
         Athena.player.emit.message(player, `Will last for about 5 minutes~`);
 
         const attachable: IAttachable = {
             model: 'prop_tool_fireaxe',
-            bone: 57005,
+            bone: PedBone.IK_R_Hand,
             pos: {
                 x: 0.1,
                 y: -0.1,
@@ -152,33 +140,36 @@ class TestCommands {
         };
 
         Athena.player.emit.objectAttach(player, attachable, 60000 * 5);
-    }
+    },
+);
 
-    @command('testjobmenu', '/testjobmenu - Shows a test job menu', PERMISSIONS.ADMIN)
-    private static testJobMenuCommand(player: alt.Player) {
-        const trigger: JobTrigger = {
-            header: 'My Job Header',
-            event: 'job:Example:Response',
-            image: '../../assets/images/job.jpg',
-            summary: `<b>Hey Listen!</b>
+Athena.commands.register('testjobmenu', '/testjobmenu - Shows a test job menu', ['admin'], (player: alt.Player) => {
+    const trigger: JobTrigger = {
+        header: 'My Job Header',
+        event: 'job:Example:Response',
+        image: '../../assets/images/job.jpg',
+        summary: `<b>Hey Listen!</b>
             
                 <p>Isn't it neat that you can write whatever you want here?</p>
-
+            
                 <p>I sure think so!</p>
             `,
-            acceptCallback: (player: alt.Player) => {
-                Athena.player.emit.message(player, `You accepted!`);
-            },
-            cancelCallback: (player: alt.Player) => {
-                Athena.player.emit.message(player, `You declined!`);
-            },
-        };
+        acceptCallback: (player: alt.Player) => {
+            Athena.player.emit.message(player, `You accepted!`);
+        },
+        cancelCallback: (player: alt.Player) => {
+            Athena.player.emit.message(player, `You declined!`);
+        },
+    };
 
-        ServerJobTrigger.create(player, trigger);
-    }
+    Athena.systems.jobTrigger.create(player, trigger);
+});
 
-    @command('testped', '/testped - A Test Ped. Does not delete itself', PERMISSIONS.ADMIN)
-    private static testPedCommand(player: alt.Player) {
+Athena.commands.register(
+    'testped',
+    '/testped - A Test Ped. Does not delete itself',
+    ['admin'],
+    (player: alt.Player) => {
         const anim1: Animation = {
             dict: 'random@arrests@busted',
             name: 'idle_a',
@@ -204,74 +195,64 @@ class TestCommands {
             animations: [anim1, anim2],
         };
 
-        PedController.append(ped);
-    }
+        Athena.controllers.staticPed.append(ped);
+    },
+);
 
-    @command('testactionmenu', '/testactionmenu - A test action menu', PERMISSIONS.ADMIN)
-    private static testActionMenuCommand(player: alt.Player) {
-        // Create an action called facePalm that uses the Animation Interface.
-        const facePalm: Action = {
-            eventName: 'animation:Action:Server',
-            isServer: true,
-            data: {
-                dict: 'anim@mp_player_intupperface_palm',
-                name: 'idle_a',
-                duration: 3000,
-                flags: ANIMATION_FLAGS.UPPERBODY_ONLY,
+Athena.commands.register('testactionmenu', '/testactionmenu - A test action menu', ['admin'], (player: alt.Player) => {
+    // Create an action called facePalm that uses the Animation Interface.
+
+    const facePalm: Action = {
+        eventName: 'animation:Action:Server',
+        isServer: true,
+        data: {
+            dict: 'anim@mp_player_intupperface_palm',
+            name: 'idle_a',
+            duration: 3000,
+            flags: ANIMATION_FLAGS.UPPERBODY_ONLY,
+        },
+    };
+
+    // Create an action called gangSign that uses the Animation Interface.
+    const gangSign: Action = {
+        eventName: 'animation:Action:Server',
+        isServer: true,
+        data: {
+            dict: 'mp_player_int_uppergang_sign_a',
+            name: 'mp_player_int_gang_sign_a',
+            duration: 3000,
+            flags: ANIMATION_FLAGS.UPPERBODY_ONLY,
+        },
+    };
+
+    Athena.player.set.actionMenu(
+        player,
+        // The menu
+        {
+            // Option 1 in the menu is a single event.
+            'Option 1': {
+                eventName: 'hello:From:Client',
+                isServer: true,
             },
-        };
 
-        // Create an action called gangSign that uses the Animation Interface.
-        const gangSign: Action = {
-            eventName: 'animation:Action:Server',
-            isServer: true,
-            data: {
-                dict: 'mp_player_int_uppergang_sign_a',
-                name: 'mp_player_int_gang_sign_a',
-                duration: 3000,
-                flags: ANIMATION_FLAGS.UPPERBODY_ONLY,
-            },
-        };
-
-        // Create the menu and send it to the player/
-        Athena.player.set.actionMenu(
-            player,
-            // The Menu
-            {
-                // Option 1 in the menu is a single event.
-                'Option 1': {
-                    eventName: 'hello:From:Client',
-                    isServer: true,
-                },
-                // Animations in the menu contains 2 more events. You can also add another menu.
-                Animations: {
-                    'Face Palm': facePalm,
-                    'Gang Sign': gangSign,
-                    // Creates a menu in the menu.
-                    'More Animations': {
-                        'Face Palm 2': facePalm, // Just using the same one for testing purposes
-                        'Gang Sign 2': gangSign,
-                        // Creates a menu in the menu in the menu
-                        'More More Animations': {
-                            'Face Palm 3': facePalm, // Just using the same one for testing purposes
-                            'Gang Sign 3': gangSign,
-                            // etc...
-                        },
+            // Animations in the menu contains 2 more events. You can also add another menu.
+            Animations: {
+                'Face Palm': facePalm,
+                'Gang Sign': gangSign,
+                // Creates a menu in the menu.
+                'More Animations': {
+                    'Face Palm 2': facePalm, // Just using the same one for testing purposes
+                    'Gang Sign 2': gangSign,
+                    // Creates a menu in the menu in the menu
+                    'More More Animations': {
+                        'Face Palm 3': facePalm, // Just using the same one for testing purposes
+                        'Gang Sign 3': gangSign,
+                        // etc...
                     },
                 },
             },
-        );
-    }
-}
-
-alt.onClient('cmd:Input:Test', (_player: alt.Player, results: InputResult[] | null) => {
-    if (!results) {
-        console.log(`They cancelled the test input.`);
-        return;
-    }
-
-    console.log(`Results from test input:`);
-    console.log(results);
+        },
+    );
 });
 
 alt.onClient('hello:From:Client', (player) => {

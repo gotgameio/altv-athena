@@ -1,37 +1,38 @@
 <template>
-    <keep-alive>
-        <div class="page">
-            <!-- Developer Menu for Local Host -->
-            <VueDevMenu
-                :pages="getAllPageNames"
-                :previousPages="pages"
-                @DevUpdatePages="devUpdatePages"
-                v-if="isDevMenu()"
-            />
-            <!-- Displays Individual Pages -->
-            <component
-                v-for="(page, index) in pages"
-                :key="index"
-                :is="page.component"
-                :id="'page-' + page.name"
-                :state="state"
-            ></component>
-            <component
-                v-for="(page, index) in overlays"
-                :key="index"
-                :is="page.component"
-                :id="'page-' + page.name"
-                :state="state"
-            ></component>
-            <component
-                v-for="(page, index) in persistent"
-                :key="index"
-                :is="page.component"
-                :id="'page-' + page.name"
-                :state="state"
-            ></component>
-        </div>
-    </keep-alive>
+    <div class="page">
+        <!-- Developer Menu for Local Host -->
+        <VueDevMenu
+            :pages="getAllPageNames"
+            :previousPages="pages"
+            @DevUpdatePages="devUpdatePages"
+            v-if="isDevMenu()"
+        />
+        <!-- Displays Individual Pages -->
+        <component
+            v-for="(page, index) in pages"
+            :key="index"
+            :is="page.component"
+            :id="'page-' + page.name"
+            :state="state"
+            :accountState="accountState"
+        />
+        <component
+            v-for="(page, index) in overlays"
+            :key="index"
+            :is="page.component"
+            :id="'page-' + page.name"
+            :state="state"
+            :accountState="accountState"
+        />
+        <component
+            v-for="(page, index) in persistent"
+            :key="index"
+            :is="page.component"
+            :id="'page-' + page.name"
+            :state="state"
+            :accountState="accountState"
+        />
+    </div>
 </template>
 
 <script lang="ts">
@@ -40,9 +41,14 @@ import { CORE_IMPORTS } from './pages/components';
 import { PLUGIN_IMPORTS } from './plugins/imports';
 import { WebViewEventNames } from '../../src/core/shared/enums/webViewEvents';
 import VueDevMenu from './components/VueDevMenu.vue';
+import { SYSTEM_EVENTS } from '@AthenaShared/enums/system';
+import { Character } from '@AthenaShared/interfaces/character';
+import * as state from '@utility/state';
 
 // Interfaces
 import IPageData from './interfaces/IPageData';
+import WebViewEvents from '@utility/webViewEvents';
+import { Account } from '@AthenaShared/interfaces/iAccount';
 
 const ALL_THE_COMPONENTS = {
     ...CORE_IMPORTS,
@@ -72,7 +78,8 @@ export default defineComponent({
             pages: [] as Array<IPageData>,
             pageBindings: componentsToArray(),
             devMode: false,
-            state: {} as { [key: string]: any },
+            state: {} as Character,
+            accountState: {} as Account,
         };
     },
     computed: {
@@ -144,8 +151,19 @@ export default defineComponent({
             this.handleSetPages(currentPages, 'pages');
             localStorage.setItem('pages', JSON.stringify(currentPages));
         },
+        setCharacterState(characterData: Character) {
+            state.set('characterState', characterData);
+            this.state = characterData;
+        },
+        setAccountState(accountData: Account) {
+            state.set('accountState', accountData);
+            this.accountState = accountData;
+        },
     },
     mounted() {
+        WebViewEvents.on(SYSTEM_EVENTS.PLAYER_EMIT_STATE, this.setCharacterState);
+        WebViewEvents.on(SYSTEM_EVENTS.PLAYER_EMIT_ACCOUNT_STATE, this.setAccountState);
+
         // What to show when 'alt' is not present.
         // Basically if alt:V isn't running with this page present inside of it.
         if (!('alt' in window)) {

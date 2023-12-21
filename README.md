@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="https://i.imgur.com/o0B5JzN.png" width="200">
+    <img src="https://i.imgur.com/iCY59PR.png" width="100">
 </p>
 
 <h2 align="center">
@@ -7,15 +7,14 @@
 </h2>
 
 <p align="center">
-    <sup>A Roleplay Framework for Developers for GTA:V</sup>
+    <sup>A Free Roleplay (Framework / Script / Tookit) for Developers for GTA:V</sup>
     <br />
     <sup>
-        <a href="https://patreon.com/stuyk/">Support on Patreon</a>
+        <a href="https://discord.com/servers/athena-framework-790039623648542760">Support / Subscribe on Discord</a>
     </sup>
 </p>
 
 <p align="center">
-    <a href="https://patreon.com/stuyk" target="__blank"><img src="https://img.shields.io/badge/Support-Patreon-orange.svg?label=" alt="Patreon"></a>
     <a href="https://typescriptlang.org" target="__blank"><img src="https://img.shields.io/badge/Typescript-Typescript-007acc?label=" alt="Language TypeScript"></a>
     <a href="https://vuejs.org" target="__blank"><img src="https://img.shields.io/badge/Framework-Vue%203-green.svg?label=" alt="Framework Vue 3"></a>
     <a href="https://nodejs.org" target="__blank"><img src="https://img.shields.io/badge/Using-NodeJS-darkgreen.svg?label=" alt="NodeJS"></a>
@@ -31,11 +30,9 @@ Ever wanted to start your own GTA:V Roleplay Server? No idea where to start? Wel
 
 ## Important Links
 
-* [Patreon](https://patreon.com/stuyk/)
-* [Documentation](https://athenaframework.com)
+* [Guides / Installation](https://athenaframework.com)
+* [Discord](https://discord.com/servers/athena-framework-790039623648542760)
 * [Issues](https://github.com/Stuyk/altv-athena/issues)
-* [Support](https://patreon.com/stuyk/)
-* [Discord](https://ares.stuyk.com/v1/get/discord)
 * [alt:V Client](https://altv.mp)
 
 ## Quick Start
@@ -44,30 +41,40 @@ Ever wanted to start your own GTA:V Roleplay Server? No idea where to start? Wel
 
 - [Install MongoDB Server](https://www.mongodb.com/try/download/community)
 - [Install Git](https://git-scm.com/downloads)
-- [NodeJS 17+](https://nodejs.org/en/download/)
+- [NodeJS 18+](https://nodejs.org/en/download/)
 - [alt:V Client](https://altv.mp/)
 
 ### Run Commands in Terminal or Powershell
+
+<br />
 
 ```
 git clone https://github.com/Stuyk/altv-athena
 ```
 
+<br />
+
 ```
 cd altv-athena
 ```
 
+<br />
+
 ```
 npm install
 ```
+<br />
 
 ```
 npm run update
 ```
+<br />
 
 ```
 npm run windows
 ```
+
+<br />
 
 ## Contributors
 

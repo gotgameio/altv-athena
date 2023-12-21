@@ -1,6 +1,6 @@
-import { LocaleFormat } from '../interfaces/localeFormat';
-import en from './languages/en'; // Importing the English Locale
-import de from './languages/de'; // Importing the German Locale
+import { LocaleFormat } from '../interfaces/localeFormat.js';
+import en from './languages/en.js'; // Importing the English Locale
+import de from './languages/de.js'; // Importing the German Locale
 export const placeholder = `_%_`;
 
 let defaultLanguage = 'en'; // Change to 'de' to set the default language to German
@@ -29,7 +29,7 @@ export class LocaleController {
      * The ISO-639-1 Code to Utilize for Language
      * @static
      * @param {string} [iso639='en']
-     * @memberof LocaleController
+     *
      */
     static setLanguage(iso639: string = 'en') {
         defaultLanguage = iso639;
@@ -40,8 +40,8 @@ export class LocaleController {
      * @static
      * @param {string} key
      * @param {...any[]} args
-     * @return {*}  {string}
-     * @memberof LocaleController
+     * @return {string}
+     *
      */
     static get(key: string, ...args: any[]): string {
         if (!locales[defaultLanguage][key]) {
@@ -61,8 +61,8 @@ export class LocaleController {
      * Returns an object of strings with labels for WebViews.
      * @static
      * @param {string} key
-     * @return {*}  {Object}
-     * @memberof LocaleController
+     * @return {Object}
+     *
      */
     static getWebviewLocale(key: string): Object {
         if (!locales[defaultLanguage][key]) {

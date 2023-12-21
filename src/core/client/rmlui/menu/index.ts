@@ -1,8 +1,8 @@
-import { AthenaClient } from '@AthenaClient/api/athena';
-import { isAnyMenuOpen } from '@AthenaClient/utility/menus';
-import { rgbaToHexAlpha } from '@AthenaShared/utility/color';
 import * as alt from 'alt-client';
-import { Invoke, Toggle, Selection, Range, MenuInfo } from './menuInterfaces';
+import * as native from 'natives';
+import * as AthenaClient from '@AthenaClient/api/index.js';
+import { rgbaToHexAlpha } from '@AthenaShared/utility/color.js';
+import { Invoke, Toggle, Selection, Range, MenuInfo } from './menuInterfaces.js';
 
 const KEYS = {
     ESCAPE_KEY: 27,
@@ -17,6 +17,8 @@ let menu: MenuInfo;
 let optionIndex: number = 0;
 let document: alt.RmlDocument;
 let pauseControl = false;
+let nextDebounce = Date.now() + 0;
+let everyTick: number;
 
 const InternalFunctions = {
     init(info: MenuInfo) {
@@ -85,12 +87,18 @@ const InternalFunctions = {
         }
 
         if (option.type === 'Range') {
-            element.innerRML = `&lt; ${option.value}/${option.max} &gt;`;
+            element.innerRML = `&lt; ${option.min} / ${option.value.toFixed(2)} / ${option.max} &gt;`;
             return;
         }
 
         if (option.type === 'Selection') {
-            element.innerRML = `&lt; ${option.options[option.value].replaceAll('&', '&amp;')} &gt;`;
+            let value = option.options[option.value];
+
+            if (typeof value === 'string') {
+                value = value.replaceAll('&', '&amp;');
+            }
+
+            element.innerRML = `&lt; ${value} &gt;`;
             return;
         }
 
@@ -113,11 +121,18 @@ const InternalFunctions = {
             document = undefined;
         }
 
+        native.disableFrontendThisFrame();
+        native.setFrontendActive(false);
+
+        if (menu.callbackOnClose) {
+            menu.callbackOnClose();
+        }
+
         menu = undefined;
-        AthenaClient.sound.frontend('CANCEL', 'HUD_FREEMODE_SOUNDSET');
+        AthenaClient.systems.sound.frontend('CANCEL', 'HUD_FREEMODE_SOUNDSET');
 
         alt.Player.local.isMenuOpen = false;
-        alt.off('keyup', InternalFunctions.handleKeyUp);
+        alt.clearEveryTick(everyTick);
     },
     /**
      * Called when pressing enter.
@@ -127,10 +142,8 @@ const InternalFunctions = {
 
         // Ignore hitting enter for Range / Selection type unless enter is used for updating.
         if ((option.type === 'Range' || option.type === 'Selection') && !option.onlyUpdateOnEnter) {
-            console.log('parsing...');
-
             pauseControl = true;
-            const specifiedValue = await AthenaClient.rmlui.inputBox.create(
+            const specifiedValue = await AthenaClient.rmlui.input.create(
                 {
                     placeholder: `Input value for ${option.title}`,
                 },
@@ -138,14 +151,14 @@ const InternalFunctions = {
             );
 
             if (typeof specifiedValue === 'undefined') {
-                AthenaClient.sound.frontend('CANCEL', 'HUD_FREEMODE_SOUNDSET');
+                AthenaClient.systems.sound.frontend('CANCEL', 'HUD_FREEMODE_SOUNDSET');
                 pauseControl = false;
                 return;
             }
 
             const value = parseFloat(specifiedValue);
             if (isNaN(value)) {
-                AthenaClient.sound.frontend('CANCEL', 'HUD_FREEMODE_SOUNDSET');
+                AthenaClient.systems.sound.frontend('CANCEL', 'HUD_FREEMODE_SOUNDSET');
                 pauseControl = false;
                 return;
             }
@@ -153,7 +166,7 @@ const InternalFunctions = {
             const min = option.type === 'Selection' ? 0 : option.min;
             const max = option.type === 'Selection' ? option.options.length - 1 : option.max;
             if (value > max || value < min) {
-                AthenaClient.sound.frontend('CANCEL', 'HUD_FREEMODE_SOUNDSET');
+                AthenaClient.systems.sound.frontend('CANCEL', 'HUD_FREEMODE_SOUNDSET');
                 pauseControl = false;
                 return;
             }
@@ -168,12 +181,12 @@ const InternalFunctions = {
             }
 
             InternalFunctions.updateValue();
-            AthenaClient.sound.frontend('SELECT', 'HUD_FREEMODE_SOUNDSET');
+            AthenaClient.systems.sound.frontend('SELECT', 'HUD_FREEMODE_SOUNDSET');
             pauseControl = false;
             return;
         }
 
-        AthenaClient.sound.frontend('SELECT', 'HUD_FREEMODE_SOUNDSET');
+        AthenaClient.systems.sound.frontend('SELECT', 'HUD_FREEMODE_SOUNDSET');
 
         // Invoke callbacks individually because TypeScript hates this.
         switch (option.type) {
@@ -190,6 +203,18 @@ const InternalFunctions = {
                 option.value = !option.value;
                 option.callback(option.value);
                 InternalFunctions.updateValue();
+                return;
+            case 'Input':
+                pauseControls();
+                await alt.Utils.wait(250);
+
+                const result = await AthenaClient.rmlui.input.create({ placeholder: option.placeholder }, true);
+
+                if (option.callback) {
+                    option.callback(result);
+                }
+
+                unpauseControls();
                 return;
         }
     },
@@ -208,7 +233,7 @@ const InternalFunctions = {
 
         InternalFunctions.updateDescription();
         InternalFunctions.updateIndex();
-        AthenaClient.sound.frontend('NAV_UP_DOWN', 'HUD_FREEMODE_SOUNDSET');
+        AthenaClient.systems.sound.frontend('NAV_UP_DOWN', 'HUD_FREEMODE_SOUNDSET');
 
         if (alt.debug) {
             alt.log(`NAV_UP -> ${optionIndex}`);
@@ -229,7 +254,7 @@ const InternalFunctions = {
 
         InternalFunctions.updateDescription();
         InternalFunctions.updateIndex();
-        AthenaClient.sound.frontend('NAV_UP_DOWN', 'HUD_FREEMODE_SOUNDSET');
+        AthenaClient.systems.sound.frontend('NAV_UP_DOWN', 'HUD_FREEMODE_SOUNDSET');
 
         if (alt.debug) {
             alt.log(`NAV_DOWN -> ${optionIndex}`);
@@ -241,11 +266,11 @@ const InternalFunctions = {
      */
     left() {
         const option = menu.options[optionIndex];
-        if (option.type === 'Invoke' || option.type === 'Toggle') {
+        if (option.type === 'Invoke' || option.type === 'Toggle' || option.type === 'Input') {
             return;
         }
 
-        AthenaClient.sound.frontend('NAV_LEFT_RIGHT', 'HUD_FREEMODE_SOUNDSET');
+        AthenaClient.systems.sound.frontend('NAV_LEFT_RIGHT', 'HUD_FREEMODE_SOUNDSET');
 
         let increment = 1;
         let min = 0;
@@ -267,6 +292,18 @@ const InternalFunctions = {
             option.value -= increment;
         }
 
+        if (option.type === 'Range') {
+            if (!option.onlyUpdateOnEnter && option.callback) {
+                option.callback(option.value);
+            }
+        }
+
+        if (option.type === 'Selection') {
+            if (!option.onlyUpdateOnEnter && option.callback) {
+                option.callback(option.options[option.value]);
+            }
+        }
+
         InternalFunctions.updateValue();
 
         if (alt.debug) {
@@ -279,11 +316,11 @@ const InternalFunctions = {
      */
     right() {
         const option = menu.options[optionIndex];
-        if (option.type === 'Invoke' || option.type === 'Toggle') {
+        if (option.type === 'Invoke' || option.type === 'Toggle' || option.type === 'Input') {
             return;
         }
 
-        AthenaClient.sound.frontend('NAV_LEFT_RIGHT', 'HUD_FREEMODE_SOUNDSET');
+        AthenaClient.systems.sound.frontend('NAV_LEFT_RIGHT', 'HUD_FREEMODE_SOUNDSET');
 
         let increment = 1;
         let min = 0;
@@ -305,19 +342,25 @@ const InternalFunctions = {
             option.value += increment;
         }
 
+        if (option.type === 'Range') {
+            if (!option.onlyUpdateOnEnter && option.callback) {
+                option.callback(option.value);
+            }
+        }
+
+        if (option.type === 'Selection') {
+            if (!option.onlyUpdateOnEnter && option.callback) {
+                option.callback(option.options[option.value]);
+            }
+        }
+
         InternalFunctions.updateValue();
 
         if (alt.debug) {
             alt.log(`NAV_RIGHT -> ${option.value}`);
         }
     },
-    /**
-     * Invokes key press functions.
-     *
-     * @param {number} keycode
-     * @return {void}
-     */
-    handleKeyUp(keycode: number) {
+    handleKeyHeld() {
         if (alt.isMenuOpen()) {
             return;
         }
@@ -326,60 +369,93 @@ const InternalFunctions = {
             return;
         }
 
-        if (typeof FUNCTION_BINDS[keycode] !== 'function') {
-            return;
-        }
+        Object.keys(FUNCTION_BINDS).forEach((keycode) => {
+            const key = parseInt(keycode);
+            if (isNaN(key)) {
+                return;
+            }
 
-        FUNCTION_BINDS[keycode]();
+            if (!alt.isKeyDown(key)) {
+                return;
+            }
+
+            if (Date.now() < nextDebounce) {
+                return;
+            }
+
+            let debounceTime = 150;
+            if (key === KEYS.RIGHT_KEY || key === KEYS.LEFT_KEY) {
+                debounceTime = 75;
+            }
+
+            nextDebounce = Date.now() + debounceTime;
+            FUNCTION_BINDS[keycode]();
+        });
     },
 };
 
-const MenuConst = {
-    create(info: MenuInfo): void {
-        if (isAnyMenuOpen(false)) {
-            alt.logWarning(`Menu could not be created because a menu is already open.`);
-            return undefined;
-        }
+/**
+ * Create a menu similar to NativeUI.
+ *
+ *
+ *
+ * @param {MenuInfo} info
+ * @return {void}
+ */
+export function create(info: MenuInfo): void {
+    if (AthenaClient.webview.isAnyMenuOpen(false)) {
+        alt.logWarning(`Menu could not be created because a menu is already open.`);
+        return undefined;
+    }
 
-        if (info.options.length > 11) {
-            alt.logWarning(`Menu Options exceeded 11 entries. Trimmed off excess menu entries.`);
-            info.options = info.options.slice(0, 11);
-        }
+    if (info.options.length > 11) {
+        alt.logWarning(`Menu Options exceeded 11 entries. Trimmed off excess menu entries.`);
+        info.options = info.options.slice(0, 11);
+    }
 
-        if (typeof info.header.color !== 'string') {
-            info.header.color = rgbaToHexAlpha(info.header.color);
-        }
+    if (typeof info.header.color !== 'string') {
+        info.header.color = rgbaToHexAlpha(info.header.color);
+    }
 
-        if (typeof document === 'undefined') {
-            document = new alt.RmlDocument('/client/rmlui/menu/index.rml');
-            document.show();
-        }
+    if (typeof document === 'undefined') {
+        document = new alt.RmlDocument('/client/rmlui/menu/index.rml');
+        document.show();
+    }
 
-        alt.Player.local.isMenuOpen = true;
-        alt.on('keyup', InternalFunctions.handleKeyUp);
-        InternalFunctions.init(info);
-    },
-    /**
-     * Call this function to close the menu.
-     * Make sure to wait for it to close before opening a new menu.
-     *
-     */
-    async close(): Promise<void> {
-        await InternalFunctions.close();
-        await alt.Utils.wait(100);
-    },
-    /**
-     * Build a menu option, and return the result.
-     * Used like: `createOption<Range>({ ... })`;
-     *
-     * @template T
-     * @param {T} menuTemplate
-     * @return {T}
-     */
-    createOption<T = Selection | Range | Toggle | Invoke>(menuTemplate: T): T {
-        return menuTemplate;
-    },
-};
+    pauseControl = false;
+    alt.Player.local.isMenuOpen = true;
+    everyTick = alt.everyTick(InternalFunctions.handleKeyHeld);
+    InternalFunctions.init(info);
+}
+/**
+ * Call this function to close the menu.
+ * Make sure to wait for it to close before opening a new menu.
+ *
+ */
+export async function close(): Promise<void> {
+    await InternalFunctions.close();
+    await alt.Utils.wait(100);
+}
+
+export function pauseControls() {
+    pauseControl = true;
+}
+
+export function unpauseControls() {
+    pauseControl = false;
+}
+
+/**
+ * Build a menu option, and return the result.
+ * Used like: `createOption<Range>({ ... })`;
+ *
+ * @template T
+ * @param {T} menuTemplate
+ * @return {T}
+ */
+export function createOption<T = Selection | Range | Toggle | Invoke>(menuTemplate: T): T {
+    return menuTemplate;
+}
 
 const FUNCTION_BINDS = {
     [KEYS.ESCAPE_KEY]: InternalFunctions.close,
@@ -396,7 +472,3 @@ alt.on('disconnect', () => {
         alt.log('menu | Destroyed RMLUI Document on Disconnect');
     }
 });
-
-export const Menu = {
-    ...MenuConst,
-};

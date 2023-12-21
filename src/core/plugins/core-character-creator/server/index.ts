@@ -1,10 +1,7 @@
-import * as alt from 'alt-server';
-import { PluginSystem } from '@AthenaServer/systems/plugins';
-import { CharacterCreatorView } from './src/view';
+import * as Athena from '@AthenaServer/api/index.js';
+import { CharacterCreatorView } from './src/view.js';
 
-const PLUGIN_NAME = 'Athena Character Creator';
-
-PluginSystem.registerPlugin(PLUGIN_NAME, () => {
+const PLUGIN_NAME = 'character-creator';
+Athena.systems.plugins.registerPlugin(PLUGIN_NAME, () => {
     CharacterCreatorView.init();
-    alt.log(`~lg~CORE ==> ${PLUGIN_NAME} was Loaded`);
 });

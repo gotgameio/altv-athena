@@ -1,0 +1,11 @@
+import '../controllers/admin.js';
+import '../controllers/blip.js';
+import '../controllers/doors.js';
+import '../controllers/dynamicDoors/player.js';
+import '../controllers/dynamicDoors/system.js';
+import '../controllers/interaction.js';
+import '../controllers/marker.js';
+import '../controllers/object.js';
+import '../controllers/staticPed.js';
+import '../controllers/textlabel.js';
+import '../controllers/worldNotifications.js';

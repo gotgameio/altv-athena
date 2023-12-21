@@ -1,5 +1,4 @@
-import { GroundItem } from '../../shared/interfaces/groundItem';
-import { Meta } from './meta';
+import { Meta } from './meta.js';
 
 declare module 'alt-client' {
     export interface Player {
@@ -8,7 +7,6 @@ declare module 'alt-client' {
 
         // Check if a re-usable WebView is open.
         isMenuOpen: boolean;
-        isChatOpen: boolean;
         isWheelMenuOpen: boolean;
         isActionMenuOpen: boolean;
         isLeaderboardOpen: boolean;

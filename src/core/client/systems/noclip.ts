@@ -1,10 +1,9 @@
 import alt from 'alt-client';
 import * as native from 'natives';
-import { SYSTEM_EVENTS } from '../../shared/enums/system';
-import { LOCALE_KEYS } from '../../shared/locale/languages/keys';
-import { LocaleController } from '../../shared/locale/locale';
-import { DirectionVector } from '../utility/directionToVector';
-import { drawText2D } from '../utility/text';
+import * as AthenaClient from '@AthenaClient/api/index.js';
+import { SYSTEM_EVENTS } from '@AthenaShared/enums/system.js';
+import { LOCALE_KEYS } from '@AthenaShared/locale/languages/keys.js';
+import { LocaleController } from '@AthenaShared/locale/locale.js';
 
 const timeBetweenPlayerUpdates = 250;
 let nextUpdate = Date.now() + 50;
@@ -87,7 +86,7 @@ const NoClip = {
         const pos = native.getCamCoord(noclipCam);
         const rot = native.getCamRot(noclipCam, 2);
 
-        const dir = new DirectionVector(pos, rot);
+        const dir = new AthenaClient.utility.vector.DirectionVector(pos, rot);
         const fwd = dir.forward(3.5);
         const sens = NoClip.getSensitivity();
 
@@ -202,15 +201,15 @@ const NoClip = {
             alt.emitServer(SYSTEM_EVENTS.NOCLIP_UPDATE, fwd);
         }
 
-        drawText2D(
+        AthenaClient.screen.text.drawText2D(
             LocaleController.get(LOCALE_KEYS.NOCLIP_SPEED_INFO),
             { x: 0.5, y: 0.89 },
             0.4,
             new alt.RGBA(255, 255, 255, 200),
             0,
         );
-        
-        drawText2D(
+
+        AthenaClient.screen.text.drawText2D(
             `${LocaleController.get(LOCALE_KEYS.NOCLIP_SPEED)}: ${sens.toFixed(2)}`,
             { x: 0.5, y: 0.92 },
             0.4,
@@ -218,7 +217,9 @@ const NoClip = {
             0,
         );
 
-        NoClip.processCameraRotation();
+        if (!native.isPauseMenuActive()) {
+            NoClip.processCameraRotation();
+        }
     },
 
     // Noclip functions

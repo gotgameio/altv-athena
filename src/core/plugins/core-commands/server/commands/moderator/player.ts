@@ -1,24 +1,38 @@
 import alt from 'alt-server';
-import { Athena } from '@AthenaServer/api/athena';
-import { command } from '@AthenaServer/decorators/commands';
-import { AdminController } from '@AthenaServer/systems/admin';
-import { PERMISSIONS } from '@AthenaShared/flags/permissionFlags';
-import { LOCALE_KEYS } from '@AthenaShared/locale/languages/keys';
-import { LocaleController } from '@AthenaShared/locale/locale';
+import * as Athena from '@AthenaServer/api/index.js';
+import Database from '@stuyk/ezmongodb';
 
-class PlayersCommand {
-    @command('sethealth', '/sethealth [value] [id]', PERMISSIONS.ADMIN)
-    private static setHealthCommand(player: alt.Player, value: number = 100, id: string | null = null): void {
-        if (isNaN(value)) {
-            Athena.player.emit.message(player, Athena.controllers.chat.getDescription('sethealth'));
+function finishSetHealth(target: alt.Player, value: number) {
+    Athena.player.safe.addHealth(target, value, true);
+    Athena.player.emit.message(target, `Player health was set to ${value}`);
+}
+
+function finishSetArmour(target: alt.Player, value: number) {
+    Athena.player.safe.addArmour(target, value, true);
+    Athena.player.emit.message(target, `Player armour was set to ${value}`);
+}
+
+Athena.commands.register(
+    'sethealth',
+    '/sethealth [value] [id]',
+    ['admin'],
+    (player: alt.Player, value: string = '100', id: string | null = null) => {
+        if (isNaN(parseInt(value))) {
+            Athena.player.emit.message(player, '/sethealth [value] [id]');
             return;
         }
 
-        if (value < 99) value = 99;
-        if (value > 199) value = 199;
+        let actualValue = parseInt(value);
+        if (actualValue < 99) {
+            actualValue = 99;
+        }
+
+        if (actualValue > 199) {
+            actualValue = 199;
+        }
 
         if (id === null || id === undefined) {
-            PlayersCommand.finishSetHealth(player, value);
+            finishSetHealth(player, actualValue);
             return;
         }
 
@@ -28,21 +42,30 @@ class PlayersCommand {
             return;
         }
 
-        PlayersCommand.finishSetHealth(target, value);
-    }
+        finishSetHealth(target, actualValue);
+    },
+);
 
-    @command('setarmour', '/setarmour [value] [id]', PERMISSIONS.ADMIN)
-    private static setArmourCommand(player: alt.Player, value: number = 100, id: string | null = null): void {
-        if (isNaN(value)) {
-            Athena.player.emit.message(player, Athena.controllers.chat.getDescription('setarmour'));
+Athena.commands.register(
+    'setarmour',
+    '/setarmour [value] [id]',
+    ['admin'],
+    (player: alt.Player, value: string = '100', id: string | null = null) => {
+        if (isNaN(parseInt(value))) {
+            Athena.player.emit.message(player, '/setarmour [value] [id]');
             return;
         }
+        let actualValue = parseInt(value);
+        if (actualValue < 0) {
+            actualValue = 0;
+        }
 
-        if (value < 0) value = 0;
-        if (value > 100) value = 100;
+        if (actualValue > 100) {
+            actualValue = 100;
+        }
 
         if (id === null || id === undefined) {
-            PlayersCommand.finishSetArmour(player, value);
+            finishSetArmour(player, actualValue);
             return;
         }
 
@@ -52,139 +75,110 @@ class PlayersCommand {
             return;
         }
 
-        PlayersCommand.finishSetArmour(target, value);
+        finishSetArmour(target, actualValue);
+    },
+);
+
+Athena.commands.register('freeze', '/freeze [id]', ['admin'], (player: alt.Player, id: string | null = null) => {
+    const target = Athena.systems.identifier.getPlayer(id);
+
+    if (!target || !target.valid) {
+        return;
     }
 
-    @command('freeze', '/freeze <ID> - Freeze the specified player by ID', PERMISSIONS.ADMIN)
-    private static freezeCommand(player: alt.Player, id: number) {
-        const target = Athena.systems.identifier.getPlayer(id);
+    const data = Athena.document.character.get(target);
+    Athena.player.safe.setPosition(target, target.pos.x, target.pos.y, target.pos.z);
+    Athena.player.emit.notification(player, `Froze ${data.name} successfully!`);
+    target.frozen = true;
+});
 
-        if (!target || !target.valid) return;
+Athena.commands.register('unfreeze', '/unfreeze [id]', ['admin'], (player: alt.Player, id: string | null = null) => {
+    const target = Athena.systems.identifier.getPlayer(id);
 
-        Athena.player.safe.setPosition(target, target.pos.x, target.pos.y, target.pos.z);
-        Athena.player.set.frozen(target, true);
-        Athena.player.emit.notification(player, `Froze ${target.data.name} successfully!`);
+    if (!target || !target.valid) {
+        return;
     }
 
-    @command('unfreeze', '/unfreeze <ID>', PERMISSIONS.ADMIN)
-    private static unfreezeCommand(player: alt.Player, id: number) {
+    const data = Athena.document.character.get(target);
+    Athena.player.emit.notification(player, `Unfroze ${data.name} successfully!`);
+    target.frozen = false;
+});
+
+Athena.commands.register(
+    'kick',
+    '/kick [id] [...reason]',
+    ['admin'],
+    (player: alt.Player, id: string | null = null, reason: string) => {
         const target = Athena.systems.identifier.getPlayer(id);
 
-        if (!target || !target.valid) return;
+        if (!target || !target.valid) {
+            return;
+        }
 
-        Athena.player.set.frozen(target, false);
-        Athena.player.emit.notification(player, `Unfroze ${target.data.name} successfully!`);
-    }
-
-    @command('kick', '/kick <ID> <REASON>', PERMISSIONS.ADMIN)
-    private static kickCommand(player: alt.Player, id: number, ...reason: string[]) {
-        const target = Athena.systems.identifier.getPlayer(id);
-
-        if (!target || !target.valid) return;
-
-        if (target.accountData.permissionLevel >= PERMISSIONS.ADMIN) {
+        if (Athena.systems.permission.has('account', target, 'admin')) {
             Athena.player.emit.notification(player, `This person can't be kicked.`);
             return;
         }
 
-        target.kick(`You are kicked from the server by ${player.data.name} | Reason: ${reason}`);
-    }
+        const data = Athena.document.character.get(player);
+        target.kick(`You are kicked from the server by ${data.name} | Reason: ${reason}`);
+    },
+);
 
-    @command('ban', '/ban <ID> <REASON> - Bans a player.', PERMISSIONS.ADMIN)
-    private static async banCommand(player: alt.Player, id: number, reason: string) {
+Athena.commands.register(
+    'ban',
+    '/ban [id] [...reason]',
+    ['admin'],
+    async (player: alt.Player, id: string | null = null, reason: string) => {
         const target = Athena.systems.identifier.getPlayer(id);
 
-        if (!target || !target.valid || !id) return;
+        if (!target || !target.valid || !id) {
+            return;
+        }
 
-        if (target.accountData.permissionLevel >= PERMISSIONS.ADMIN) {
+        if (Athena.systems.permission.has('account', target, 'admin')) {
             Athena.player.emit.notification(player, `This person can't be kicked.`);
             return;
         }
 
-        Athena.player.emit.notification(player, `${target.data.name} was banned from the Server.`);
+        const accountData = Athena.document.account.get(target);
+        const data = Athena.document.character.get(target);
+        Athena.player.emit.notification(player, `${data.name} was banned from the Server.`);
         target.kick(`You were banned from the Server - ${reason}`);
-        await Athena.database.funcs.updatePartialData(
-            target.accountData._id,
+        await Database.updatePartialData(
+            accountData._id,
             { banned: true, reason: reason },
             Athena.database.collections.Accounts,
         );
-    }
+    },
+);
 
-    @command('unban', '/unban <DISCORDIDENTIFIER> - Unbans a player by discord ID', PERMISSIONS.ADMIN)
-    private static unbanCommand(player: alt.Player, discordIdentifier: string) {
+Athena.commands.register(
+    'unban',
+    '/unban [discord_identifier]',
+    ['admin'],
+    async (player: alt.Player, discordIdentifier: string | null = null) => {
         if (!player || !player.valid) {
             return;
         }
-        const unbanned = AdminController.unbanPlayer(discordIdentifier);
+
+        const unbanned = Athena.controllers.admin.unbanPlayerByDiscord(discordIdentifier);
         if (unbanned) {
+            const data = Athena.document.character.get(player);
             Athena.player.emit.message(player, `Unbanned ${discordIdentifier} (Discord)`);
-            alt.logWarning(`${discordIdentifier} (Discord) was unbanned by ${player.data.name}`);
+            alt.logWarning(`${discordIdentifier} (Discord) was unbanned by ${data.name}`);
             return;
         }
+
         Athena.player.emit.message(player, `Could not find that account with Discord ID: ${discordIdentifier}`);
-    }
+    },
+);
 
-    @command('makeAdmin', '/makeAdmin <ID> - Add permission specified player.', PERMISSIONS.ADMIN)
-    private static async makeAdminCommand(player: alt.Player, id: number | string, permissionLevel: number) {
-        if (!player || !player.valid) return;
-
-        const target = Athena.systems.identifier.getPlayer(id);
-        if (!target) {
-            Athena.player.emit.message(player, LocaleController.get(LOCALE_KEYS.CANNOT_FIND_PLAYER));
-            return;
-        }
-
-        target.accountData.permissionLevel = permissionLevel;
-
-        await Athena.database.funcs.updatePartialData(
-            target.accountData._id,
-            { permissionLevel: target.accountData.permissionLevel },
-            Athena.database.collections.Accounts,
-        );
-        alt.logWarning(`(${target.data.name}) had their permission level changed to: ${permissionLevel}.`);
-    }
-
-    @command('info', '/info <ID> - Get account info for the specified id.', PERMISSIONS.ADMIN)
-    private static infoCommand(player: alt.Player, id: number) {
-        const target = Athena.systems.identifier.getPlayer(id);
-
-        if (!target || !target.valid) return;
-
-        if (!target.accountData) {
-            Athena.player.emit.notification(player, `Could not find account info for ${id}!`);
-        }
-
-        const dataToSend = [];
-
-        dataToSend.push(`--- INFO FOR ${target.data.name} ---`);
-        dataToSend.push(`ACCOUNT: ${target.data.account_id.toString()}`);
-
-        if (target.accountData && target.accountData.discord) {
-            dataToSend.push(`DISCORD: ${target.accountData.discord}`);
-        }
-
-        dataToSend.push(`IPs: ${JSON.stringify(target.accountData.ips)}`);
-        dataToSend.push(`PERMISSION LEVEL: ${target.accountData.permissionLevel}`);
-        dataToSend.push(`HARDWARE: ${target.accountData.hardware}`);
-        dataToSend.push(`--- --- ---`);
-
-        for (const element of dataToSend) {
-            Athena.player.emit.message(player, element);
-        }
-    }
-
-    private static finishSetHealth(target: alt.Player, value: number) {
-        Athena.player.safe.addHealth(target, value, true);
-        Athena.player.emit.message(target, `Player health was set to ${value}`);
-    }
-
-    private static finishSetArmour(target: alt.Player, value: number) {
-        Athena.player.safe.addArmour(target, value, true);
-        Athena.player.emit.message(target, `Player armour was set to ${value}`);
-    }
-
-    @command('tempcomponent', '/tempcomponent id num', PERMISSIONS.ADMIN)
-    private static setComponent(player: alt.Player, id: string, value: string) {
+Athena.commands.register(
+    'tempcomponent',
+    '/tempcomponent [id] [value]',
+    ['admin'],
+    async (player: alt.Player, id: string, value: string) => {
         if (typeof id === 'undefined' || typeof value === 'undefined') {
             Athena.player.emit.message(player, `Must provide id, and value.`);
             return;
@@ -196,10 +190,14 @@ class PlayersCommand {
         } catch (err) {
             Athena.player.emit.message(player, err.toString());
         }
-    }
+    },
+);
 
-    @command('tempprop', '/tempprop id num', PERMISSIONS.ADMIN)
-    private static setProp(player: alt.Player, id: string, value: string) {
+Athena.commands.register(
+    'tempprop',
+    '/tempprop [id] [value]',
+    ['admin'],
+    async (player: alt.Player, id: string, value: string) => {
         if (typeof id === 'undefined' || typeof value === 'undefined') {
             Athena.player.emit.message(player, `Must provide id, and value.`);
             return;
@@ -211,5 +209,10 @@ class PlayersCommand {
         } catch (err) {
             Athena.player.emit.message(player, err.toString());
         }
-    }
-}
+    },
+);
+
+Athena.commands.register('hasitemcheck', '/hasitemcheck', ['admin'], async (player: alt.Player) => {
+    const result = await Athena.player.inventory.has(player, 'burger', 1);
+    console.log(result);
+});

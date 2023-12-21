@@ -1,17 +1,17 @@
-import { exec } from 'child_process';
-import fs from "fs";
-import glob from 'glob';
 import * as path from 'path';
+import fs from 'fs';
 
-const viablePluginDisablers = [
-    'disable.plugin',
-    'disabled.plugin',
-    'disable',
-]
+import { promisify } from 'util';
+import { exec as execCallback } from 'child_process';
+import { sanitizePath } from '../shared/path.js';
+import { globSync } from '../shared/fileHelpers.js';
 
-function sanitizePath(p) {
-    return p.replace(/\\/g, '/');
-}
+const exec = promisify(execCallback);
+const viablePluginDisablers = ['disable.plugin', 'disabled.plugin', 'disable'];
+
+const dependencies = [];
+const devDependencies = [];
+const githubDependencies = [];
 
 function getInstalledDependencies() {
     const packageJsonPath = sanitizePath(path.join(process.cwd(), 'package.json'));
@@ -24,41 +24,45 @@ function getInstalledDependencies() {
         process.exit(1);
     }
 
-    const dependencies = [];
     for (const dependency in contents.dependencies) {
         dependencies.push(dependency);
     }
 
-    const devDependencies = [];
     for (const dependency in contents.devDependencies) {
         devDependencies.push(dependency);
     }
 
-    return { dependencies, devDependencies };
+    for (const dependency in contents.githubDependencies) {
+        githubDependencies.push(dependency);
+    }
+
+    return { dependencies, devDependencies, githubDependencies };
 }
 
 function getPluginDependencies(pluginName) {
     const pluginPath = sanitizePath(path.join(process.cwd(), 'src/core/plugins', pluginName));
 
-    const dependencies = {
+    const pluginDependencies = {
         dependencies: [],
-        devDependencies: []
-    }
+        devDependencies: [],
+        githubDependencies: [],
+    };
 
     for (const disabler of viablePluginDisablers) {
         const disabledPath = sanitizePath(path.join(pluginPath, disabler));
         if (fs.existsSync(disabledPath)) {
-            return dependencies;
+            return pluginDependencies;
         }
     }
 
     const dependencyPath = sanitizePath(path.join(pluginPath, 'dependencies.json'));
 
     if (!fs.existsSync(dependencyPath)) {
-        return dependencies;
+        return pluginDependencies;
     }
 
-    let contents = null;
+    let contents;
+
     try {
         contents = JSON.parse(fs.readFileSync(dependencyPath, 'utf8'));
     } catch (error) {
@@ -66,23 +70,26 @@ function getPluginDependencies(pluginName) {
     }
 
     if (!contents) {
-        return dependencies;
+        return pluginDependencies;
     }
 
-    for (const name of (contents.dependencies ?? [])) {
-        dependencies.dependencies.push(name);
+    for (const name of contents.dependencies ?? []) {
+        pluginDependencies.dependencies.push(name);
     }
 
-    for (const name of (contents.devDependencies ?? [])) {
-        dependencies.devDependencies.push(name);
+    for (const name of contents.devDependencies ?? []) {
+        pluginDependencies.devDependencies.push(name);
     }
 
-    return dependencies;
+    for (const name of contents.githubDependencies ?? []) {
+        pluginDependencies.githubDependencies.push(name);
+    }
+
+    return pluginDependencies;
 }
 
 function checkPluginDependencies() {
-    const installedDependencies = getInstalledDependencies();
-    const plugins = glob.sync(sanitizePath(path.join(process.cwd(), 'src/core/plugins/*')));
+    const plugins = globSync(sanitizePath(path.join(process.cwd(), 'src/core/plugins/*')));
 
     const missingDepdendencies = [];
 
@@ -91,14 +98,15 @@ function checkPluginDependencies() {
 
         const pluginDependencies = getPluginDependencies(pluginName);
 
-        if (pluginDependencies.dependencies.length === 0)
-            continue;
+        if (pluginDependencies.dependencies.length === 0) continue;
 
-        console.log(`Checking dependencies for plugin '${pluginName}': ${pluginDependencies.dependencies.length} dependencies`);
+        console.log(
+            `>>> Checking dependencies for plugin '${pluginName}': ${pluginDependencies.dependencies.length} dependencies`,
+        );
 
         if (pluginDependencies.dependencies.length > 0) {
             for (const dependency of pluginDependencies.dependencies) {
-                if (!installedDependencies.dependencies.includes(dependency)) {
+                if (!dependencies.includes(dependency)) {
                     missingDepdendencies.push(dependency);
                 }
             }
@@ -109,8 +117,7 @@ function checkPluginDependencies() {
 }
 
 function checkPluginDevDependencies() {
-    const installedDependencies = getInstalledDependencies();
-    const plugins = glob.sync(sanitizePath(path.join(process.cwd(), 'src/core/plugins/*')));
+    const plugins = globSync(sanitizePath(path.join(process.cwd(), 'src/core/plugins/*')));
 
     const missingDevDepdendencies = [];
 
@@ -119,14 +126,15 @@ function checkPluginDevDependencies() {
 
         const pluginDependencies = getPluginDependencies(pluginName);
 
-        if (pluginDependencies.devDependencies.length === 0)
-            continue;
+        if (pluginDependencies.devDependencies.length === 0) continue;
 
-        console.log(`Checking development dependencies for plugin '${pluginName}': ${pluginDependencies.devDependencies.length} dependencies`);
+        console.log(
+            `>>> Checking development dependencies for plugin '${pluginName}': ${pluginDependencies.devDependencies.length} dependencies`,
+        );
 
         if (pluginDependencies.devDependencies.length > 0) {
             for (const dependency of pluginDependencies.devDependencies) {
-                if (!installedDependencies.devDependencies.includes(dependency)) {
+                if (!devDependencies.includes(dependency)) {
                     missingDevDepdendencies.push(dependency);
                 }
             }
@@ -136,27 +144,118 @@ function checkPluginDevDependencies() {
     return missingDevDepdendencies;
 }
 
-function updatePluginDependencies() {
-    const missingDepdendencies = checkPluginDependencies();
-    const missingDevDependencies = checkPluginDevDependencies();
+export async function updatePluginDependencies() {
+    const installedDepsObj = getInstalledDependencies();
+    const installedDeps = installedDepsObj.dependencies;
+    const installedDevDeps = installedDepsObj.devDependencies;
 
-    if (missingDepdendencies.length > 0) {
-        exec(`npm install ${missingDepdendencies.join(' ')}`, (error, _stdout, stderr) => {
-            if (error) {
-                console.error(`Failed to install dependencies: ${error}`);
-                console.error(stderr);
-            }
-        });
-    }
+    const missingDeps = checkPluginDependencies();
+    const missingDevDeps = checkPluginDevDependencies();
 
-    if (missingDevDependencies.length > 0) {
-        exec(`npm install -D ${missingDevDependencies.join(' ')}`, (error, _stdout, stderr) => {
-            if (error) {
-                console.error(`Failed to install dev dependencies: ${error}`);
-                console.error(stderr);
+    const sanitizeDependencies = (dependencies) => dependencies.map((dep) => dep.replace(/@.*$/, ''));
+
+    const sanitizedMissingDeps = sanitizeDependencies(missingDeps);
+    const sanitizedMissingDevDeps = sanitizeDependencies(missingDevDeps);
+
+    if (sanitizedMissingDeps.some((dep) => !installedDeps.includes(dep) || !existsInModules(dep))) {
+        const missingRegularDeps = missingDeps.filter((dep) => !installedDeps.includes(dep));
+        if (missingRegularDeps.length > 0) {
+            console.log(`>>> Installing regular dependencies...`);
+            missingRegularDeps.forEach((dep) => {
+                console.log(`- ${dep}`);
+            });
+
+            try {
+                const { stdout } = await exec(`npm install ${missingRegularDeps.join(' ')}`);
+                console.log(stdout);
+
+                await installDevDependencies(installedDevDeps, sanitizedMissingDevDeps, missingDevDeps);
+            } catch (error) {
+                console.error(`>>> Failed to install regular dependencies: ${error}`);
+                console.error(error.stderr);
             }
-        });
+        } else {
+            await installDevDependencies(installedDevDeps, sanitizedMissingDevDeps, missingDevDeps);
+        }
+    } else {
+        await installDevDependencies(installedDevDeps, sanitizedMissingDevDeps, missingDevDeps);
     }
 }
 
-updatePluginDependencies();
+async function installDevDependencies(installedDevDeps, sanitizedMissingDevDeps, missingDevDeps) {
+    if (sanitizedMissingDevDeps.some((dep) => !installedDevDeps.includes(dep) || !existsInModules(dep))) {
+        const missingDevDepsToAdd = missingDevDeps.filter((dep) => !installedDevDeps.includes(dep));
+        if (missingDevDepsToAdd.length > 0) {
+            console.log(`>>> Installing dev dependencies...`);
+            missingDevDepsToAdd.forEach((dep) => {
+                console.log(`- ${dep}`);
+            });
+
+            try {
+                const { stdout } = await exec(`npm install -D ${missingDevDepsToAdd.join(' ')}`);
+                console.log(stdout);
+
+                await installGithubDependencies();
+            } catch (error) {
+                console.error(`Failed to install dev dependencies: ${error}`);
+                console.error(error.stderr);
+            }
+        } else {
+            await installGithubDependencies();
+        }
+    } else {
+        await installGithubDependencies();
+    }
+}
+
+async function installGithubDependencies() {
+    const plugins = globSync(sanitizePath(path.join(process.cwd(), 'src/core/plugins/*')));
+
+    for (const plugin of plugins) {
+        const pluginName = path.basename(plugin);
+        const pluginDependencies = getPluginDependencies(pluginName);
+
+        const githubDependencies = pluginDependencies.githubDependencies.filter(isValidGitHubRepoURL);
+
+        if (githubDependencies.length === 0) continue;
+
+        console.log(`>>> GitHub Dependencies for plugin "${pluginName}":`);
+        githubDependencies.forEach((githubDependency) => {
+            console.log(`- ${githubDependency}`);
+        });
+
+        for (const githubDependency of githubDependencies) {
+            const dependencyName = githubDependency.split('/').pop();
+            const targetPath = sanitizePath(path.join(process.cwd(), 'src/core/plugins/', dependencyName));
+
+            if (fs.existsSync(targetPath)) {
+                console.log(`>>> Dependency folder "${dependencyName}" already exists. Skipping.`);
+            } else {
+                const cloneCommand = `git clone ${githubDependency}.git ${targetPath}`;
+
+                try {
+                    const { stdout } = await exec(cloneCommand);
+                    console.log(`>>> Cloned "${dependencyName}" from GitHub:\n${stdout}`);
+                } catch (error) {
+                    console.error(`>>> Failed to clone "${dependencyName}" from GitHub: ${error.message}`);
+                }
+            }
+        }
+    }
+}
+
+function existsInModules(dependencyName) {
+    const nodeModulesPath = path.join(process.cwd(), 'node_modules', dependencyName);
+    return fs.existsSync(nodeModulesPath);
+}
+
+function isValidGitHubRepoURL(url) {
+    const githubRepoURLPattern = /^https:\/\/github\.com\/([A-Za-z0-9-_.]+)\/([A-Za-z0-9-_.]+)\/?$/;
+    const isValid = githubRepoURLPattern.test(url);
+
+    if (!isValid) {
+        console.log(`${url} is not an valid GitHub URL!`);
+    }
+
+    return isValid;
+}

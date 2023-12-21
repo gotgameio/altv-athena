@@ -1,103 +1,113 @@
 import * as alt from 'alt-client';
 import * as native from 'natives';
-import { distance } from '../../shared/utility/vector';
-import { isAnyMenuOpen } from '../utility/menus';
-import { IWheelOptionExt } from '../../shared/interfaces/wheelMenu';
-import { WheelMenu } from '../views/wheelMenu';
-import { GroundItem } from '../../shared/interfaces/groundItem';
+import * as AthenaClient from '@AthenaClient/api/index.js';
 
-type ObjectMenuInjection = (
-    modelHash: number,
-    scriptID: number,
+import { IWheelOptionExt } from '../../shared/interfaces/wheelMenu.js';
+import { CreatedObject } from '@AthenaClient/streamers/object.js';
+
+export type ObjectMenuInjection = (
+    existingObject: CreatedObject,
     options: Array<IWheelOptionExt>,
-    item?: GroundItem,
 ) => Array<IWheelOptionExt>;
 
 const Injections: Array<ObjectMenuInjection> = [];
-const validHashes: Array<number> = [];
+let disabled = false;
 
-const ObjectWheelMenuConst = {
-    /**
-     * Allows the current Menu Options to be modified.
-     * Meaning, a callback that will modify existing options, or append new options to the menu.
-     * Must always return the original wheel menu options + your changes.
-     *
-     * @static
-     * @param {ObjectMenuInjection} callback
-     * @memberof ObjectWheelMenu
-     */
-    addInjection(callback: ObjectMenuInjection): void {
-        Injections.push(callback);
-    },
+/**
+ * Allows the current Menu Options to be modified.
+ * Meaning, a callback that will modify existing options, or append new options to the menu.
+ * Must always return the original wheel menu options + your changes.
+ *
+ * @static
+ * @param {ObjectMenuInjection} callback
+ *
+ */
+export function addInjection(callback: ObjectMenuInjection): void {
+    if (Overrides.addInjection) {
+        return Overrides.addInjection(callback);
+    }
 
-    /**
-     * Allows to register a valid object hash
-     *
-     * @static
-     * @param {number} objectHash
-     * @memberof ObjectWheelMenu
-     */
-    registerObject(objectHash: number): void {
-        validHashes.push(objectHash);
-    },
+    if (disabled) {
+        return;
+    }
 
-    /**
-     * Opens the wheel menu against a target npc script id.
-     *
-     * @static
-     * @param {number} scriptID
-     * @return {*}
-     * @memberof ObjectWheelMenu
-     */
-    openMenu(scriptID: number, item?: GroundItem): void {
-        if (isAnyMenuOpen()) {
-            return;
+    Injections.push(callback);
+}
+
+/**
+ * Opens the wheel menu against a target object created with the server-side object api
+ *
+ * @static
+ * @param {CreatedObject} scriptID
+ * @return {void}
+ *
+ */
+export function open(object: CreatedObject): void {
+    if (Overrides.open) {
+        return Overrides.open(object);
+    }
+
+    if (disabled) {
+        return;
+    }
+
+    if (AthenaClient.webview.isAnyMenuOpen()) {
+        return;
+    }
+
+    if (!object.createdObject) {
+        return;
+    }
+
+    if (!native.isEntityAnObject(object.createdObject.scriptID)) {
+        return;
+    }
+
+    const coords = native.getEntityCoords(object.createdObject.scriptID, false);
+    const dist = AthenaClient.utility.vector.distance(alt.Player.local.pos, coords);
+    if (dist >= 3) {
+        return;
+    }
+
+    let options: Array<IWheelOptionExt> = [];
+
+    for (const callback of Injections) {
+        try {
+            options = callback(object, options);
+        } catch (err) {
+            console.warn(`Got Object Menu Injection Error: ${err}`);
+            continue;
         }
+    }
 
-        if (!native.isEntityAnObject(scriptID)) {
-            return;
-        }
+    // Used to debug if the item showed up correctly
+    // options.push({ name: `${object.model}` });
 
-        const coords = native.getEntityCoords(scriptID, false);
-        const dist = distance(alt.Player.local.pos, coords);
-        if (dist >= 3) {
-            return;
-        }
+    if (options.length <= 0) {
+        return;
+    }
 
-        const hash = native.getEntityModel(scriptID);
+    AthenaClient.systems.wheelMenu.open('Object', options);
+}
 
-        let options: Array<IWheelOptionExt> = [];
+/**
+ * Disable the Object Wheel Menu
+ *
+ * @export
+ */
+export function disable() {
+    disabled = true;
+}
 
-        for (const callback of Injections) {
-            try {
-                options = callback(hash, scriptID, options, item);
-            } catch (err) {
-                console.warn(`Got Object Menu Injection Error: ${err}`);
-                continue;
-            }
-        }
+interface ObjectMenuFuncs {
+    addInjection: typeof addInjection;
+    open: typeof open;
+}
 
-        if (options.length <= 0) {
-            return;
-        }
+const Overrides: Partial<ObjectMenuFuncs> = {};
 
-        WheelMenu.open('Object', options);
-    },
-
-    /**
-     * Check if an object is registered for interaction.
-     *
-     * @static
-     * @param {number} modelHash
-     * @return {*}
-     * @memberof InteractionController
-     */
-    isModelValidObject(modelHash: number): boolean {
-        const index = validHashes.findIndex((x) => `${x}` === `${modelHash}`);
-        return index >= 0;
-    },
-};
-
-export const ObjectWheelMenu = {
-    ...ObjectWheelMenuConst,
-};
+export function override(functionName: 'addInjection', callback: typeof addInjection);
+export function override(functionName: 'open', callback: typeof open);
+export function override(functionName: keyof ObjectMenuFuncs, callback: any): void {
+    Overrides[functionName] = callback;
+}

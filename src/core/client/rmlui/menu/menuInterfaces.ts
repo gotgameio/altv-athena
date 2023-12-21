@@ -5,7 +5,7 @@ interface MenuOptionBase<T = Function> {
      * The title of this menu option.
      *
      * @type {string}
-     * @memberof MenuOptionBase
+     *
      */
     title: string;
 
@@ -13,7 +13,7 @@ interface MenuOptionBase<T = Function> {
      * A description of this menu option.
      *
      * @type {string}
-     * @memberof MenuOptionBase
+     *
      */
     description: string;
 
@@ -21,35 +21,35 @@ interface MenuOptionBase<T = Function> {
      * A callback when this menu option is changed.
      *
      * @type {T | Function}
-     * @memberof MenuOptionBase
+     *
      */
-    callback: T | Function;
+    callback: T | Function | ((...args: any[]) => void);
 
     /**
      * Only for Range & Selection Types
      *
      * @type {boolean}
-     * @memberof MenuOptionBase
+     *
      */
     onlyUpdateOnEnter?: boolean;
 }
 
-export interface Selection extends MenuOptionBase<(value: string) => void> {
+export interface Selection extends MenuOptionBase<(value: string | number) => void> {
     type: 'Selection';
 
     /**
      * The available values for this option.
      *
      * @type {Array<string>}
-     * @memberof Selection
+     *
      */
-    options: Array<string>;
+    options: Array<string | number>;
 
     /**
      * Current index of this selection.
      *
      * @type {number}
-     * @memberof Selection
+     *
      */
     value: number;
 
@@ -57,7 +57,7 @@ export interface Selection extends MenuOptionBase<(value: string) => void> {
      * Only update when 'Enter' is pressed.
      *
      * @type {boolean}
-     * @memberof Selection
+     *
      */
     onlyUpdateOnEnter?: boolean;
 }
@@ -69,7 +69,7 @@ export interface Toggle extends MenuOptionBase<(value: boolean) => void> {
      * The default value for this menu.
      *
      * @type {boolean}
-     * @memberof Toggle
+     *
      */
     value: boolean;
 }
@@ -81,7 +81,7 @@ export interface Range extends MenuOptionBase<(value: number) => void> {
      * The starting value of the range.
      *
      * @type {number}
-     * @memberof Range
+     *
      */
     value: number;
 
@@ -89,7 +89,7 @@ export interface Range extends MenuOptionBase<(value: number) => void> {
      * Minimum Value
      *
      * @type {number}
-     * @memberof Range
+     *
      */
     min: number;
 
@@ -97,7 +97,7 @@ export interface Range extends MenuOptionBase<(value: number) => void> {
      * Maximum Value
      *
      * @type {number}
-     * @memberof Range
+     *
      */
     max: number;
 
@@ -105,7 +105,7 @@ export interface Range extends MenuOptionBase<(value: number) => void> {
      * Number to increment by
      *
      * @type {number}
-     * @memberof Range
+     *
      */
     increment: number;
 
@@ -113,13 +113,25 @@ export interface Range extends MenuOptionBase<(value: number) => void> {
      * Only update when 'Enter' is pressed.
      *
      * @type {boolean}
-     * @memberof Selection
+     *
      */
     onlyUpdateOnEnter?: boolean;
 }
 
-export interface Invoke extends MenuOptionBase<() => void> {
+export interface Input extends MenuOptionBase<() => void> {
     type: 'Invoke';
+}
+
+export interface Invoke extends MenuOptionBase<(result: string) => void> {
+    type: 'Input';
+
+    /**
+     *
+     *
+     * @type {string}
+     * @memberof Invoke
+     */
+    placeholder: string;
 }
 
 export interface MenuInfo {
@@ -143,7 +155,15 @@ export interface MenuInfo {
      * An array of available menu types to invoke.
      *
      * @type {(Array<Selection | Invoke | Range | Toggle>)}
+     *
+     */
+    options: Array<Selection | Range | Toggle | Invoke | Input>;
+
+    /**
+     * Function to call when the menu is closed through other means.
+     *
+     * @type {Function}
      * @memberof MenuInfo
      */
-    options: Array<Selection | Range | Toggle | Invoke>;
+    callbackOnClose?: Function;
 }

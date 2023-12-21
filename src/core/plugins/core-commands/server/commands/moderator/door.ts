@@ -1,26 +1,30 @@
 import alt from 'alt-server';
-import { Athena } from '@AthenaServer/api/athena';
-import { command } from '@AthenaServer/decorators/commands';
-import { PERMISSIONS } from '@AthenaShared/flags/permissionFlags';
-import { Doors } from '@AthenaShared/information/doors';
+import * as Athena from '@AthenaServer/api/index.js';
 
-class DoorCommands {
-    @command('toggledoor', '/toggledoor - Toggles state of closest door.', PERMISSIONS.ADMIN)
-    private static toggleClosetDoor(player: alt.Player) {
-        const doorsByDistance = Doors.sort((a, b) => {
-            const distA = Athena.utility.vector.distance(player.pos, a.pos);
-            const distB = Athena.utility.vector.distance(player.pos, b.pos);
+Athena.commands.register('toggledoor', '/toggledoor', ['admin'], (player: alt.Player) => {
+    const doorsByDistance = Athena.controllers.doors.getDoors().sort((a, b) => {
+        const distA = Athena.utility.vector.distance(player.pos, a.pos);
+        const distB = Athena.utility.vector.distance(player.pos, b.pos);
 
-            return distA - distB;
-        });
+        return distA - distB;
+    });
 
-        const closestDoor = doorsByDistance[0];
-        if (!closestDoor) {
-            Athena.player.emit.message(player, 'No doors found.');
-            return;
-        }
-
-        Athena.controllers.doors.update(closestDoor.uid, !closestDoor.isUnlocked);
-        Athena.player.emit.message(player, `Toggling Door ${closestDoor.uid}. Unlocked: ${!closestDoor.isUnlocked}`);
+    const closestDoor = doorsByDistance[0];
+    if (!closestDoor) {
+        Athena.player.emit.message(player, 'No doors found.');
+        return;
     }
-}
+
+    if (Athena.utility.vector.distance(player.pos, closestDoor.pos) >= 5) {
+        Athena.player.emit.message(player, 'No door in reach found.');
+        return;
+    }
+
+    const result = Athena.controllers.doors.update(closestDoor.uid, !closestDoor.isUnlocked);
+    if (!result) {
+        Athena.player.emit.message(player, `Failed to toggle door ${closestDoor.uid}`);
+        return;
+    }
+
+    Athena.player.emit.message(player, `Toggling Door ${closestDoor.uid}. Unlocked: ${closestDoor.isUnlocked}`);
+});
